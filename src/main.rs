@@ -6,11 +6,19 @@ use std::{env, fs, io};
 use eyre::{Context, bail};
 use notify::{Event, EventKind, RecursiveMode, Watcher, recommended_watcher};
 use regex::Regex;
+use tracing::{error, info};
 
 static EXEC_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"Exec=steam (.+)").unwrap());
 static ICON_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"Icon=(.+)").unwrap());
 
 fn main() -> eyre::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
+
     let Ok(home) = env::var("HOME") else {
         bail!("Could not determine home dir");
     };
@@ -60,7 +68,7 @@ impl SyncManager {
         let mut watcher = recommended_watcher(tx)?;
         watcher.watch(&self.src_dir, RecursiveMode::NonRecursive)?;
 
-        println!("Watching {} for changes", self.src_dir.display());
+        info!("Watching {} for changes", self.src_dir.display());
 
         for res in rx {
             let event = res.wrap_err("Watch error")?;
@@ -77,7 +85,7 @@ impl SyncManager {
                 };
 
                 if let Err(err) = result {
-                    eprintln!("{err:?}");
+                    error!("{err:?}");
                 }
             }
         }
@@ -101,7 +109,7 @@ impl SyncManager {
             format!("Icon={}/$1.png", self.icon_path.display()),
         );
 
-        println!("Syncing {}", path.display());
+        info!("Syncing {}", path.display());
 
         fs::write(self.target_dir.join(file_name), contents.as_bytes())
             .wrap_err_with(|| format!("Failed to write desktop file for {path:?}"))
@@ -114,7 +122,7 @@ impl SyncManager {
 
         let target_path = self.target_dir.join(file_name);
 
-        println!("Removing {}", target_path.display());
+        info!("Removing {}", target_path.display());
 
         match fs::remove_file(&target_path) {
             Ok(()) => Ok(()),
